@@ -1,3 +1,17 @@
+# Yuno ClearSale SDK for Android
+
+The **Yuno ClearSale SDK** provides device fingerprinting and fraud prevention capabilities by integrating with [ClearSale](https://www.clear.sale/). This SDK is distributed separately as `com.yuno.fraud-prevention:clearsale` and is designed to complement the **Yuno Payments SDK**.
+
+By collecting device information and generating a `sessionId`, the ClearSale SDK helps enhance fraud prevention during the payment flow.
+
+## Requirements
+
+Before starting the integration:
+
+* Ensure you have an active **ClearSale account** and obtain your **ClearSale App Key**. This key is required to initialize the SDK.
+* Have a working integration of the [Yuno Payments SDK](doc:full-sdk-android) in your Android project.
+* Ensure the project meets the [general requirements for Yuno Android SDKs](doc:requirements-android).
+
 ## Adding the YunoAntiFraud ClearSale library to the project
 Add the YunoAntiFraud ClearSale dependency to the application build.gradle file:
 
@@ -27,76 +41,83 @@ dependencies {
 }
 ```
 
-### Initialize YunoAntiFraud
-First, you'll need to get your ClearSale app key, Then, initialize the library calling the following in the onCreate() method of your application class:
-```Kotlin 
-initYunoClearSale("Your ClearSale app key")
-```
+## Step 1: Include the library
 
-**Note:** If you don't currently implement a custom application, you’ll need to create one. A custom application looks like this:
-```kotlin 
-class CustomApplication : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        initYunoClearSale("Your ClearSale app key")
-    }
+Add the ClearSale SDK as a dependency in your Gradle configuration:
+
+```kotlin
+dependencies {
+    implementation "com.yuno.fraud-prevention:clearsale:{last_version}"
 }
 ```
 
-You’ll need to update your manifest to use your application:
-```XML 
-<application
-    android:name=".CustomApplication">
-</application>
+You must also include the Yuno Payments SDK to handle payment flows.
+
+## Step 2: Initialize ClearSale SDK
+
+The ClearSale SDK requires explicit lifecycle integration. You must call the provided functions from your `Activity` or `Fragment` lifecycle methods.
+
+### Initialize the SDK
+
+Call `onCreateYunoClearSale()` in your `onCreate()` method (Activity) or `onCreateView()` (Fragment):
+
+```kotlin
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    onCreateYunoClearSale("<your-clear-sale-app-key>")
+}
 ```
 
-## Functions
-### onCreateYunoClearSale()
-You must call onCreateYunoClearSale() method, this depends on the type of screen to be used:
--If it is an Activity screen, onCreateYunoClearSale() must be called at the onCreate().
--If it is a Fragment screen, onCreateYunoClearSale() must be called at the onCreateView().
+### Start session and collect device information
 
-Activity:
-```Kotlin 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        onCreateYunoClearSale()
-    }
+Call `onResumeYunoClearSale()` in your `onResume()` method.
+This function generates a new `sessionId`, starts data collection, and returns the `sessionId` string:
+
+```kotlin
+override fun onResume() {
+    super.onResume()
+    val sessionId = onResumeYunoClearSale()
+}
 ```
 
-Fragment:
-```Kotlin 
-    override fun onCreateView(
-        LayoutInflater inflater, 
-        ViewGroup container,
-        Bundle savedInstanceState
-    ) : View {
-        val view = inflater.inflate(layout,container,attachToRoot)
-        this.context?.onCreateYunoClearSale()
-        return view
-    }
-```
+You should persist this `sessionId` (for example, in your app state or backend) so it can later be passed to the Yuno Payments SDK.
 
-### onResumeYunoClearSale()
-To start the collection of data on the device and screen, call the following method from your activity's or fragment's onResume() method:
-```Kotlin 
-    onResumeYunoClearSale(
-        hasToCollectDeviceInfo : Boolean //set true if you want to collect the device information, set false if you only want to collect screen information
-    ) : String //This method returns the sessionId that you will send to Yuno Payments SDK
-```
-**Note:** If the library is not initialized before call onResumeYunoClearSale() method, you will see a Log like this:
-```
-    E/YunoClearSale: Attempt to invoke virtual method 'void sale.clear.behavior.android.Behavior.start()' on a null object reference
-```
-This is because you did not call onCreateYunoClearSale() method at onCreate() method of your screen.
+### Stop ClearSale session
 
-### onStopYunoClearSale()
-To stop the collection of data on the device and screen, call the following method from your activity's or fragment's onStop() method:
-```Kotlin 
+Call `onStopYunoClearSale()` in your `onStop()` method to release resources:
+
+```kotlin
+override fun onStop() {
+    super.onStop()
     onStopYunoClearSale()
+}
 ```
-**Note:** If the library is not initialized before call onStopYunoClearSale() method, you will see a Log like this:
+
+## Step 3: Share the ClearSale Session ID with Yuno Payments
+
+The `sessionId` generated by ClearSale must be shared with the **Yuno Payments SDK** to complete the fraud-prevention integration.
+Pass the `sessionId` to the `merchantSessionId` parameter when starting the checkout flow:
+
+```kotlin
+startPayment(
+    callbackOTT = { oneTimeToken ->
+        ...
+    },
+    merchantSessionId = sessionId,
+    ...
+)
+or
+startPaymentLite(
+    callbackOTT = { oneTimeToken ->
+        ...
+    },
+    merchantSessionId = sessionId,
+    ...
+)
 ```
-    E/YunoClearSale: Attempt to invoke virtual method 'void sale.clear.behavior.android.Behavior.stop()' on a null object reference
-```
-This is because you did not call onCreateYunoClearSale() method at onCreate() method of your screen.
+
+## Summary of Lifecycle Calls
+
+* `onCreateYunoClearSale(appKey)` → Call once in `onCreate()`
+* `onResumeYunoClearSale()` → Call in `onResume()` to generate and retrieve `sessionId`
+* `onStopYunoClearSale()` → Call in `onStop()` to stop session tracking
